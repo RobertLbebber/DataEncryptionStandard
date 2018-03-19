@@ -10,8 +10,11 @@ import static crypto.Driver.ENV_LOGGER_LEVEL;
  */
 public class BabyDES {
     private static final Logger LOGGER = Logger.getLogger(BabyDES.class.getName());
-    private final String SBOX_PATH;
+    private final String SBOX1_PATH;
+    private final String SBOX2_PATH;
     private final int ITERATIONS;
+
+    private long privateKey;
 
     static {
         LOGGER.setLevel(ENV_LOGGER_LEVEL);
@@ -20,12 +23,17 @@ public class BabyDES {
     private int keyLength;
     private int msgLength;
 
-    public BabyDES(int keyLength, int msgLength, String sboxPath, int iter) {
+    public BabyDES(int keyLength, int msgLength, String sbox1Path, String sbox2Path, int iter) {
         this.keyLength = keyLength;
         this.msgLength = msgLength;
         ITERATIONS = iter;
-        SBOX_PATH = sboxPath;
+        SBOX1_PATH = sbox1Path;
+        SBOX2_PATH = sbox2Path;
         LOGGER.info("keyLength: " + keyLength + " msgLength: " + msgLength);
+    }
+
+    long getPrivateKey() {
+        return privateKey;
     }
 
     public String encode(long[] inputValues) {
@@ -34,75 +42,87 @@ public class BabyDES {
 
         for (int i = 1; i < inputValues.length; i++) {
             long message = inputValues[i];
-            long lCurr = 0L;
-            long rCurr = 0L;
+            long lCurr = message >>> (msgLength / 2);
+            long rCurr = message % (1 << msgLength / 2);
             for (int j = 0; j < ITERATIONS; j++) {
-                message = inputValues[i];
-                lCurr = message >>> (msgLength / 2);
-                rCurr = message & ((1 << (msgLength / 2)) - 1);
                 LOGGER.log(Level.FINE, "key: " + key + " message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(lCurr) + " rCurr:" + Long.toBinaryString(rCurr));
 
-                long rexCurr = expander(rCurr) ^ key;
-                LOGGER.log(Level.INFO, "rexCurr: " + Long.toBinaryString(rexCurr) + " key: " + Long.toBinaryString(key));
+                long rexCurr = expander(rCurr) ^ (key >>> 1);
+                LOGGER.log(Level.FINE, "rexCurr: " + Long.toBinaryString(rexCurr) + " key: " + Long.toBinaryString(key));
 
-                rexCurr = sbox(rexCurr) ^ lCurr;//reCurr is being used as a temp right here
+                rexCurr = sbox(rexCurr) ^ lCurr;
+                LOGGER.log(Level.FINE, "rexCurr2: " + Long.toBinaryString(rexCurr) + " key: " + Long.toBinaryString(key));
 
                 lCurr = rCurr;
                 rCurr = rexCurr;
+                key = keyRotate(key, true);
+                LOGGER.log(Level.FINE, "message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(lCurr) + " rCurr: " + Long.toBinaryString(rCurr) + " key: " + Long.toBinaryString(key));
             }
-            sb.append(Long.toBinaryString(lCurr) + "" + Long.toBinaryString(rCurr )+ " \n");
+            lCurr <<= msgLength / 2;
+            lCurr += rCurr;
+            sb.append(Long.toBinaryString(lCurr) + " \n");
+            LOGGER.log(Level.FINE, "finalCurr: " + Long.toBinaryString(lCurr));
         }
+        privateKey = keyRotate(key, false);
         return sb.toString();
     }
 
-    public String decode(long[] inputValues) {
+    public String decode(long key, long[] inputValues) {
         StringBuilder sb = new StringBuilder();
-        long key = inputValues[0];
-/*
-        for (int i = 1; i < inputValues.length; i++) {
+//        key = keyRotate(key, false);
+
+        for (int i = inputValues.length - 1; i >= 0; i--) {
             long message = inputValues[i];
-            long lCurr = 0L;
-            long rCurr = 0L;
+            long _rCurr = message >>> (msgLength / 2);
+            long _lCurr = message % (1 << msgLength / 2);
             for (int j = 0; j < ITERATIONS; j++) {
-                message = inputValues[i];
-                lCurr = message >>> (msgLength / 2);
-                rCurr = message & ((1 << (msgLength / 2)) - 1);
-                LOGGER.log(Level.FINE, "key: " + key + " message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(lCurr) + " rCurr:" + Long.toBinaryString(rCurr));
+                LOGGER.log(Level.FINE, "key: " + key + " message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(_lCurr) + " rCurr:" + Long.toBinaryString(_rCurr));
 
-                long rexCurr = expander(rCurr) ^ key;
-                LOGGER.log(Level.INFO, "rexCurr: " + Long.toBinaryString(rexCurr) + " key: " + Long.toBinaryString(key));
+                long _rexCurr = expander(_rCurr) ^ (key >>> 1);
+                LOGGER.log(Level.FINE, "rexCurr: " + Long.toBinaryString(_rexCurr) + " key: " + Long.toBinaryString(key));
 
-                rexCurr = sbox(rexCurr) ^ lCurr;//reCurr is being used as a temp right here
+                _rexCurr = sbox(_rexCurr) ^ _lCurr;//reCurr is being used as a temp right here
 
-                lCurr = rCurr;
-                rCurr = rexCurr;
+                _lCurr = _rCurr;
+                _rCurr = _rexCurr;
+                key = keyRotate(key, false);
+                LOGGER.log(Level.FINE, "message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(_lCurr) + " rCurr: " + Long.toBinaryString(_rCurr) + " key: " + Long.toBinaryString(key));
             }
-            sb.append(rCurr + " ");
+            sb.append(Long.toBinaryString(_rCurr) + "" + Long.toBinaryString(_lCurr) + " \n");
+            LOGGER.log(Level.FINE, "finalCurr: " + Long.toBinaryString(_rCurr) + "" + Long.toBinaryString(_lCurr));
+
         }
-        */
         return sb.toString();
     }
 
     private long sbox(long rexCurr) {
-        long[] svalues = FileWorker.readFile(SBOX_PATH);
-        long toS1 = rexCurr >>> ((keyLength - 1) / 2);
-        long toS2 = rexCurr & ((1 << ((keyLength - 1) / 2)) - 1);
+        long[] s1values = FileWorker.readFile(SBOX1_PATH);
+        long[] s2values = FileWorker.readFile(SBOX2_PATH);
+        long toS1 = rexCurr >>> (keyLength / 2);
+        long toS2 = rexCurr % (1 << (keyLength / 2));
         if (rexCurr > Integer.MAX_VALUE) {
             LOGGER.severe("Value of Expanded Submessage is Too Large For Java Primitive Arrays");
         }
         LOGGER.log(Level.INFO, "rexCurr: " + Long.toBinaryString(rexCurr) + " toS1: " + Long.toBinaryString(toS1) + " toS2: " + Long.toBinaryString(toS2));
-        rexCurr = svalues[(int) toS1];
-        rexCurr <<= (msgLength) / 4;
-        rexCurr += svalues[(int) (toS2 + (keyLength - 1) * 2)];
+        rexCurr = s1values[(int) toS1];
+        rexCurr <<= msgLength / 4;
+        rexCurr += s2values[(int) toS2];
 
-        LOGGER.log(Level.INFO, "rexCurr: " + Long.toBinaryString(rexCurr));
+        LOGGER.log(Level.FINE, "rexCurr: " + Long.toBinaryString(rexCurr));
         return rexCurr;
     }
 
-    private long keyRotate(long key) {
-        byte bit = (byte) (key >>> (keyLength - 1));
-        key <<= 1;
-        key += bit;
+    private long keyRotate(long key, boolean leftward) {
+        if (leftward) {
+            byte bit = (byte) (key >>> (keyLength - 1));
+            key = key & ~(1 << (keyLength - 1));
+            key <<= 1;
+            key += bit;
+        } else {
+            byte bit = (byte) (key & 1);
+            key = key | (bit << keyLength);
+            key >>= 1;
+        }
         return key;
     }
 
@@ -113,14 +133,18 @@ public class BabyDES {
         msgExpanded = (subMessage & 0b11);
         subMessage >>>= position;
         byte bits = (byte) (subMessage & 0b11);
-        for (; position < msgLength / 2; subMessage >>>= 1) {
-            msgExpanded += (bits >>> 1) << position;
-            position++;
-            msgExpanded += (bits % 2) << position;
-            position++;
+        if (msgLength % 4 == 0) {
+            for (; position < msgLength / 2; subMessage >>>= 1) {
+                msgExpanded += (bits >>> 1) << position;
+                position++;
+                msgExpanded += (bits % 2) << position;
+                position++;
+            }
+            msgExpanded += (subMessage & 0b11) << position;
+        } else {
+            msgExpanded^=msgExpanded<<2;
         }
-        msgExpanded += (subMessage & 0b11) << position;
-        LOGGER.log(Level.FINE, "saveMessage: " + Long.toBinaryString(saveMessage) + " msgExpanded: " + Long.toBinaryString(msgExpanded));
+        LOGGER.log(Level.INFO, "saveMessage: " + Long.toBinaryString(saveMessage) + " msgExpanded: " + Long.toBinaryString(msgExpanded));
         return msgExpanded;
     }
 

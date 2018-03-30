@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static crypto.Driver.ENV_LOGGER_LEVEL;
@@ -23,40 +22,55 @@ public class FileWorker {
         LOGGER.setLevel(ENV_LOGGER_LEVEL);
     }
 
-    static void writeFile(String filePath, int msgLength, String toWrite) {
+    public static void writeFile(String filePath, int msgLength, String toWrite) {
         try (Scanner s = new Scanner(filePath); FileWriter writer = new FileWriter(toWrite)) {
             while (s.hasNext()) {
-//                String result = Long.toBinaryString(s.nextLong());
-                String result = String.format("%0" + msgLength + "d", s.nextLong());
-                writer.write(result + "\n");
+                writer.write(s.next() + "\n");
             }
         } catch (IOException e) {
             LOGGER.warning("File Not Found: " + e.getMessage());
         }
     }
 
-
-    static long[] readFile(String filePath) {
+    public static long[] readFile(String filePath) {
 
         List<Long> lines = new ArrayList<>();
         try (Scanner s = new Scanner(new FileReader(filePath))) {
             while (s.hasNext()) {
                 long temp = s.nextLong(2);
-                LOGGER.log(Level.FINE, "Current Long: " + temp);
                 lines.add(temp);
             }
         } catch (FileNotFoundException e) {
             LOGGER.warning("File Not Found: " + e.getMessage());
         }
-        LOGGER.log(Level.FINE, "Read from: " + filePath + " Elements= " + lines.size());
         long[] temp = new long[lines.size()];
 
         for (int i = 0; i < lines.size(); i++) {
             temp[i] = lines.get(i);
         }
-
         return temp;
     }
 
-
+    public static char[][][] getSboxes(String sbox1Path, String sbox2Path) {
+        char[][][] sboxes = new char[2][16][3];
+        try {
+            Scanner s = new Scanner(new FileReader(sbox1Path));
+            for (int i = 0; s.hasNext(); i++) {
+                String number = s.next();
+                for (int j = 0; j < number.length(); j++) {
+                    sboxes[0][i][j] = number.charAt(j);
+                }
+            }
+            s = new Scanner(new FileReader(sbox2Path));
+            for (int i = 0; s.hasNext(); i++) {
+                String number = s.next();
+                for (int j = 0; j < number.length(); j++) {
+                    sboxes[1][i][j] = number.charAt(j);
+                }
+            }
+        } catch (FileNotFoundException e) {
+            LOGGER.warning("File Not Found: " + e.getMessage());
+        }
+        return sboxes;
+    }
 }

@@ -23,7 +23,8 @@ public class BabyDES {
     private int keyLength;
     private int msgLength;
 
-    public BabyDES(int keyLength, int msgLength, String sbox1Path, String sbox2Path, int iter) {
+    public BabyDES(long privateKey, int keyLength, int msgLength, String sbox1Path, String sbox2Path, int iter) {
+        this.privateKey = privateKey;
         this.keyLength = keyLength;
         this.msgLength = msgLength;
         ITERATIONS = iter;
@@ -36,61 +37,72 @@ public class BabyDES {
         return privateKey;
     }
 
-    public String encode(long[] inputValues) {
+    public String encode(long[] inputValues, boolean resetKey) {
         StringBuilder sb = new StringBuilder();
-        long key = inputValues[0];
+        long key = privateKey;
 
-        for (int i = 1; i < inputValues.length; i++) {
+        for (int i = 0; i < inputValues.length; i++) {
+            if (resetKey) {
+                key = privateKey;
+            }
             long message = inputValues[i];
             long lCurr = message >>> (msgLength / 2);
             long rCurr = message % (1 << msgLength / 2);
             for (int j = 0; j < ITERATIONS; j++) {
-                LOGGER.log(Level.FINE, "key: " + key + " message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(lCurr) + " rCurr:" + Long.toBinaryString(rCurr));
+                LOGGER.log(Level.INFO, "key: " + key + " message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(lCurr) + " rCurr:" + Long.toBinaryString(rCurr));
 
                 long rexCurr = expander(rCurr) ^ (key >>> 1);
-                LOGGER.log(Level.FINE, "rexCurr: " + Long.toBinaryString(rexCurr) + " key: " + Long.toBinaryString(key));
+                LOGGER.log(Level.INFO, "rexCurr: " + Long.toBinaryString(rexCurr) + " key: " + Long.toBinaryString(key));
 
                 rexCurr = sbox(rexCurr) ^ lCurr;
-                LOGGER.log(Level.FINE, "rexCurr2: " + Long.toBinaryString(rexCurr) + " key: " + Long.toBinaryString(key));
+                LOGGER.log(Level.INFO, "rexCurr2: " + Long.toBinaryString(rexCurr) + " key: " + Long.toBinaryString(key));
 
                 lCurr = rCurr;
                 rCurr = rexCurr;
                 key = keyRotate(key, true);
-                LOGGER.log(Level.FINE, "message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(lCurr) + " rCurr: " + Long.toBinaryString(rCurr) + " key: " + Long.toBinaryString(key));
+                LOGGER.log(Level.INFO, "message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(lCurr) + " rCurr: " + Long.toBinaryString(rCurr) + " key: " + Long.toBinaryString(key));
             }
             lCurr <<= msgLength / 2;
             lCurr += rCurr;
-            sb.append(Long.toBinaryString(lCurr) + " \n");
-            LOGGER.log(Level.FINE, "finalCurr: " + Long.toBinaryString(lCurr));
+            padding(sb, Long.toBinaryString(lCurr), msgLength);
+            LOGGER.log(Level.INFO, "finalCurr: " + Long.toBinaryString(lCurr));
         }
         privateKey = keyRotate(key, false);
         return sb.toString();
     }
 
-    public String decode(long key, long[] inputValues) {
-        StringBuilder sb = new StringBuilder();
-//        key = keyRotate(key, false);
+    private void padding(StringBuilder sb, String asLong, int length) {
+        for (int i = asLong.length(); i < length; i++) {
+            sb.append("0");
+        }
+        sb.append(asLong + "\n");
+    }
 
+    public String decode(long key, long[] inputValues, boolean resetKey) {
+        StringBuilder sb = new StringBuilder();
+        privateKey = key;
         for (int i = inputValues.length - 1; i >= 0; i--) {
+            if (resetKey) {
+                key = privateKey;
+            }
             long message = inputValues[i];
             long _rCurr = message >>> (msgLength / 2);
             long _lCurr = message % (1 << msgLength / 2);
             for (int j = 0; j < ITERATIONS; j++) {
-                LOGGER.log(Level.FINE, "key: " + key + " message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(_lCurr) + " rCurr:" + Long.toBinaryString(_rCurr));
+                LOGGER.log(Level.INFO, "key: " + key + " message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(_lCurr) + " rCurr:" + Long.toBinaryString(_rCurr));
 
                 long _rexCurr = expander(_rCurr) ^ (key >>> 1);
-                LOGGER.log(Level.FINE, "rexCurr: " + Long.toBinaryString(_rexCurr) + " key: " + Long.toBinaryString(key));
+                LOGGER.log(Level.INFO, "rexCurr: " + Long.toBinaryString(_rexCurr) + " key: " + Long.toBinaryString(key));
 
                 _rexCurr = sbox(_rexCurr) ^ _lCurr;//reCurr is being used as a temp right here
 
                 _lCurr = _rCurr;
                 _rCurr = _rexCurr;
                 key = keyRotate(key, false);
-                LOGGER.log(Level.FINE, "message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(_lCurr) + " rCurr: " + Long.toBinaryString(_rCurr) + " key: " + Long.toBinaryString(key));
+                LOGGER.log(Level.INFO, "message: " + Long.toBinaryString(message) + " lCurr: " + Long.toBinaryString(_lCurr) + " rCurr: " + Long.toBinaryString(_rCurr) + " key: " + Long.toBinaryString(key));
             }
-            sb.append(Long.toBinaryString(_rCurr) + "" + Long.toBinaryString(_lCurr) + " \n");
-            LOGGER.log(Level.FINE, "finalCurr: " + Long.toBinaryString(_rCurr) + "" + Long.toBinaryString(_lCurr));
-
+            padding(sb, Long.toBinaryString(_rCurr) + "" + Long.toBinaryString(_lCurr), msgLength);
+            LOGGER.log(Level.INFO, "finalCurr: " + Long.toBinaryString(_rCurr) + "" + Long.toBinaryString(_lCurr));
         }
         return sb.toString();
     }
@@ -108,7 +120,7 @@ public class BabyDES {
         rexCurr <<= msgLength / 4;
         rexCurr += s2values[(int) toS2];
 
-        LOGGER.log(Level.FINE, "rexCurr: " + Long.toBinaryString(rexCurr));
+        LOGGER.log(Level.INFO, "rexCurr: " + Long.toBinaryString(rexCurr));
         return rexCurr;
     }
 
@@ -142,7 +154,7 @@ public class BabyDES {
             }
             msgExpanded += (subMessage & 0b11) << position;
         } else {
-            msgExpanded^=msgExpanded<<2;
+            msgExpanded ^= msgExpanded << 2;
         }
         LOGGER.log(Level.INFO, "saveMessage: " + Long.toBinaryString(saveMessage) + " msgExpanded: " + Long.toBinaryString(msgExpanded));
         return msgExpanded;
